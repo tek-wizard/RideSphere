@@ -1,4 +1,4 @@
-# 🚖 Mini Ride-Sharing Backend (Uber Clone)
+#  Mini Ride-Sharing Backend (Uber Clone)
 
 ## 1. Project Overview (The "Big Picture")
 This project is the **backend "brain"** for a mini Ride-Sharing application. 
@@ -12,11 +12,11 @@ Imagine a mobile app where a user clicks "Book Ride." The app talks to this code
 ## 2. Implemented Features
 We created a set of **API Endpoints** (URLs) to handle the core functionality of the app.
 
-### 🔐 Security (The Bouncer)
+###  Security (The Bouncer)
 * **Registration:** Users can sign up as either a `PASSENGER` or a `DRIVER`. Passwords are encrypted (BCrypt) before saving, ensuring security.
 * **Login (JWT):** Upon login, users receive a digital "badge" (JSON Web Token). This token must be shown with every subsequent request to prove identity and authorization.
 
-### 🚕 Ride Logic (The Matchmaker)
+###  Ride Logic (The Matchmaker)
 * **Create Ride:** Passengers can initiate a trip request (e.g., "I want to go from A to B").
 * **View Requests:** Drivers can view a list of all passengers currently waiting for a ride.
 * **Accept Ride:** A driver can select a specific ride to accept, assigning themselves to that trip.
@@ -27,13 +27,13 @@ We created a set of **API Endpoints** (URLs) to handle the core functionality of
 ## 3. Technical Architecture
 The project follows the **Clean Architecture** pattern to ensure organization and scalability:
 
-* **🏢 Controller (The Receptionist):** The first point of contact. It receives incoming requests (e.g., "Book a ride") and performs input validation to ensure data integrity.
+* ** Controller (The Receptionist):** The first point of contact. It receives incoming requests (e.g., "Book a ride") and performs input validation to ensure data integrity.
     
-* **👔 Service (The Manager):** Contains the core business logic. It validates rules (e.g., "Is this user actually a driver?" or "Is this ride already taken?") before processing.
+* ** Service (The Manager):** Contains the core business logic. It validates rules (e.g., "Is this user actually a driver?" or "Is this ride already taken?") before processing.
     
-* **📚 Repository (The Librarian):** Handles all interactions with the MongoDB database to save, fetch, or update data.
+* ** Repository (The Librarian):** Handles all interactions with the MongoDB database to save, fetch, or update data.
     
-* **🛡️ Global Exception Handler (The Safety Net):** A centralized error handling mechanism. If the system crashes or a user attempts unauthorized actions, this catches the error and returns a polite JSON response instead of a raw stack trace.
+* ** Global Exception Handler (The Safety Net):** A centralized error handling mechanism. If the system crashes or a user attempts unauthorized actions, this catches the error and returns a polite JSON response instead of a raw stack trace.
 
 ---
 
