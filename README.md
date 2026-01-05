@@ -1,51 +1,54 @@
-#  Mini Ride-Sharing Backend (Uber Clone)
+#  Ride-Sharing Backend (Uber Clone)
 
-## 1. Project Overview (The "Big Picture")
-This project is the **backend "brain"** for a mini Ride-Sharing application. 
+## Project Overview
+This is a backend implementation for a mini Ride-Sharing application built as part of my coursework. It handles the core logic for a booking system where Passengers can request rides and Drivers can accept them. 
 
-Imagine a mobile app where a user clicks "Book Ride." The app talks to this code. This backend creates the logic that checks if the user is allowed to book, saves the ride details in the database, and lets a driver see the request. 
-
-*Note: This project focuses strictly on the logic and data handling (Backend), not the visual interface (Frontend).*
+The project focuses on **Backend Logic, Data Handling, and Security** using Spring Boot and MongoDB.
 
 ---
 
-## 2. Implemented Features
-We created a set of **API Endpoints** (URLs) to handle the core functionality of the app.
+##  Implemented Features
 
-###  Security (The Bouncer)
-* **Registration:** Users can sign up as either a `PASSENGER` or a `DRIVER`. Passwords are encrypted (BCrypt) before saving, ensuring security.
-* **Login (JWT):** Upon login, users receive a digital "badge" (JSON Web Token). This token must be shown with every subsequent request to prove identity and authorization.
+### Core Functionality
+* **User Roles:** Separate logic for `PASSENGER` and `DRIVER`.
+* **Security:** JWT (JSON Web Token) authentication. Users get a token upon login which acts as their digital ID.
+* **Ride Lifecycle:** Full flow from *Ride Requested* → *Accepted* → *Completed*.
 
-###  Ride Logic (The Matchmaker)
-* **Create Ride:** Passengers can initiate a trip request (e.g., "I want to go from A to B").
-* **View Requests:** Drivers can view a list of all passengers currently waiting for a ride.
-* **Accept Ride:** A driver can select a specific ride to accept, assigning themselves to that trip.
-* **Complete Ride:** Once the trip is finished, the ride status is updated to "Completed."
-
----
-
-## 3. Technical Architecture
-The project follows the **Clean Architecture** pattern to ensure organization and scalability:
-
-* ** Controller (The Receptionist):** The first point of contact. It receives incoming requests (e.g., "Book a ride") and performs input validation to ensure data integrity.
-    
-* ** Service (The Manager):** Contains the core business logic. It validates rules (e.g., "Is this user actually a driver?" or "Is this ride already taken?") before processing.
-    
-* ** Repository (The Librarian):** Handles all interactions with the MongoDB database to save, fetch, or update data.
-    
-* ** Global Exception Handler (The Safety Net):** A centralized error handling mechanism. If the system crashes or a user attempts unauthorized actions, this catches the error and returns a polite JSON response instead of a raw stack trace.
+### Advanced Features (Analytics & Search)
+* **Analytics Dashboard:** APIs to track Driver Earnings, User Spending, and Daily Ride Counts using **MongoDB Aggregations**.
+* **Smart Search:** Regex-based search to find rides by location name (e.g., "Airport").
+* **Filtering:** Filters for Ride Distance (e.g., 5km-10km), Date Ranges, and Status.
+* **Sorting:** Ability to sort available rides by Fare.
 
 ---
 
-## 4. Development Notes: Circular Dependency Fix
-During development, we encountered and resolved a **Circular Dependency** issue within the Spring Boot configuration.
+##  Technical Architecture
+I followed a **Clean Architecture** approach to keep the code organized and readable:
 
-### The Problem ("Chicken and Egg")
-The `SecurityConfig` bean required the `JwtFilter`, but the `JwtFilter` required dependencies defined inside `SecurityConfig`. This created a loop where neither could start first.
+1.  **Controller:** The entry point. Handles the HTTP requests and input validation.
+2.  **Service:** Contains the business rules (e.g., calculating fares, verifying driver status).
+3.  **Repository:** Manages direct communication with the MongoDB database.
+4.  **Global Exception Handler:** Catches errors centrally to return clean JSON error messages instead of server crashes.
 
-### The Fix
-We refactored the architecture by extracting the user-loading logic into a separate configuration file:
-* **Moved:** `UserDetailsService`, `PasswordEncoder`, and `AuthenticationProvider`
-* **To:** A new `ApplicationConfig` class.
+---
 
-This allowed both the Security Configuration and the Filter to access user data independently without locking each other.
+##  Development Notes
+**Solving the Circular Dependency**
+One challenge I faced was a "Circular Dependency" error where `SecurityConfig` and `JwtFilter` were depending on each other, preventing the app from starting. 
+
+I resolved this by refactoring the user authentication beans (`UserDetailsService`, `PasswordEncoder`) into a separate `ApplicationConfig` class. This broke the cycle and improved the code structure.
+
+---
+
+##  API Endpoints Summary
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| **POST** | `/api/auth/register` | Register a new user (User/Driver) |
+| **POST** | `/api/auth/login` | Login and receive JWT Token |
+| **POST** | `/api/v1/rides` | Create a new ride request |
+| **GET** | `/api/v1/driver/rides/requests` | View pending rides (Driver only) |
+| **POST** | `/api/v1/driver/rides/{id}/accept` | Accept a ride |
+| **POST** | `/api/v1/rides/{id}/complete` | Mark ride as completed |
+| **GET** | `/api/v1/search?text=...` | Search rides by location |
+| **GET** | `/api/v1/analytics/driver/{id}/summary` | View driver earnings & stats |
