@@ -1,51 +1,176 @@
-#  Mini Ride-Sharing Backend (Uber Clone)
+# RideSphere
 
-## 1. Project Overview (The "Big Picture")
-This project is the **backend "brain"** for a mini Ride-Sharing application. 
+**RideSphere** is a high-performance backend engine designed to simulate the distributed architectural challenges of top-tier ride-hailing platforms. Unlike standard CRUD applications, this project prioritizes **system design reliability** over simple data storage, specifically engineering solutions for **concurrency race conditions, geospatial latency, and high-throughput scalability**.
 
-Imagine a mobile app where a user clicks "Book Ride." The app talks to this code. This backend creates the logic that checks if the user is allowed to book, saves the ride details in the database, and lets a driver see the request. 
-
-*Note: This project focuses strictly on the logic and data handling (Backend), not the visual interface (Frontend).*
+It differentiates itself by strictly implementing industry-standard optimizations: transitioning geospatial searches from $O(N)$ to **$O(1)$ constant time via Redis Grid Sharding**, enforcing strong consistency with **Redlock distributed locking** to prevent double-bookings, and replacing resource-heavy polling with **event-driven WebSockets**. This infrastructure ensures sub-millisecond driver matching and API stability even under simulated high-load scenarios.
 
 ---
 
-## 2. Implemented Features
-We created a set of **API Endpoints** (URLs) to handle the core functionality of the app.
+## Core Features & Functionality
 
-###  Security (The Bouncer)
-* **Registration:** Users can sign up as either a `PASSENGER` or a `DRIVER`. Passwords are encrypted (BCrypt) before saving, ensuring security.
-* **Login (JWT):** Upon login, users receive a digital "badge" (JSON Web Token). This token must be shown with every subsequent request to prove identity and authorization.
+### 1. Authentication & Security
+* **Stateless Architecture:** Implements a fully stateless authentication mechanism using **JSON Web Tokens (JWT)**.
+* **Role-Based Access Control (RBAC):** Granular security policies enforced via Spring Security.
+    * `ROLE_USER`: Access to ride booking, history, and spending analytics.
+    * `ROLE_DRIVER`: Access to ride requests, performance stats, and location updates.
+* **Secure Filtering:** Custom `OncePerRequestFilter` chains (`JwtFilter`) ensure token validation prior to request processing.
 
-###  Ride Logic (The Matchmaker)
-* **Create Ride:** Passengers can initiate a trip request (e.g., "I want to go from A to B").
-* **View Requests:** Drivers can view a list of all passengers currently waiting for a ride.
-* **Accept Ride:** A driver can select a specific ride to accept, assigning themselves to that trip.
-* **Complete Ride:** Once the trip is finished, the ride status is updated to "Completed."
+### 2. Ride Lifecycle Management
+* **State Machine Logic:** Manages the complex state transitions of a ride (`REQUESTED` $\rightarrow$ `ACCEPTED` $\rightarrow$ `COMPLETED`).
+* **Transactional Integrity:** logic prevents invalid state jumps (e.g., a driver cannot complete a ride that has not been accepted).
+* **Dynamic Data Models:** Utilizes **MongoDB** documents to store flexible ride data, including fare calculation, distance metrics, and timestamps.
+
+### 3. Advanced Search Engine
+* **Dynamic Query Building:** Bypasses standard repository methods in favor of `MongoTemplate` to construct complex, multi-criteria queries dynamically.
+* **capabilities:**
+    * **Text Search:** Case-insensitive regex matching for pickup/drop locations.
+    * **Filters:** Multi-layered filtering by status, date ranges, and distance thresholds.
+    * **Pagination:** Optimized `PageRequest` implementation for handling large datasets efficiently.
+
+### 4. Data Analytics & Aggregation
+* **Aggregation Pipelines:** Leverages MongoDB's powerful aggregation framework to perform server-side calculations, reducing application memory overhead.
+* **Driver Performance:** Real-time calculation of total earnings, ride counts, and average distances per driver.
+* **Financial Insights:** Aggregated spending history for passengers.
+* **Temporal Analysis:** Time-series grouping to visualize ride volume trends over time (e.g., Rides Per Day).
 
 ---
 
-## 3. Technical Architecture
-The project follows the **Clean Architecture** pattern to ensure organization and scalability:
+## Distributed Systems Implementations
 
-* ** Controller (The Receptionist):** The first point of contact. It receives incoming requests (e.g., "Book a ride") and performs input validation to ensure data integrity.
-    
-* ** Service (The Manager):** Contains the core business logic. It validates rules (e.g., "Is this user actually a driver?" or "Is this ride already taken?") before processing.
-    
-* ** Repository (The Librarian):** Handles all interactions with the MongoDB database to save, fetch, or update data.
-    
-* ** Global Exception Handler (The Safety Net):** A centralized error handling mechanism. If the system crashes or a user attempts unauthorized actions, this catches the error and returns a polite JSON response instead of a raw stack trace.
+### 1. $O(1)$ Geo-Spatial Sharding
+* **Problem:** Traditional geospatial queries (e.g., `$near`) degrade to $O(N)$ or $O(\log N)$ as the dataset grows.
+* **Solution:** Implemented **Grid-Based Spatial Indexing** using **Redis**. The world is partitioned into discrete $1km \times 1km$ buckets.
+* **Complexity:** Driver lookups are reduced to constant time **$O(1)$**, independent of the total driver count.
+
+### 2. Distributed Locking (Redlock)
+* **Problem:** Concurrent "Accept Ride" requests can lead to race conditions where multiple drivers are assigned the same ride.
+* **Solution:** Integrated **Redisson** to implement the **Redlock** algorithm. Critical sections are guarded by distributed locks, ensuring strong consistency across multiple server instances.
+
+### 3. Real-Time Event Streaming
+* **Problem:** Polling for ride updates wastes bandwidth and increases server load.
+* **Solution:** Implemented a full-duplex **WebSocket** communication layer using the **STOMP** protocol. Ride events are pushed asynchronously to drivers in real-time.
+
+### 4. API Rate Limiting
+* **Problem:** Vulnerability to DDoS attacks and API abuse.
+* **Solution:** Deployed a **Token Bucket** algorithm via Redis at the filter chain level. This protects the core logic by rejecting excess traffic (`HTTP 429`) before it reaches database connections.
 
 ---
 
-## 4. Development Notes: Circular Dependency Fix
-During development, we encountered and resolved a **Circular Dependency** issue within the Spring Boot configuration.
+## Technology Stack
 
-### The Problem ("Chicken and Egg")
-The `SecurityConfig` bean required the `JwtFilter`, but the `JwtFilter` required dependencies defined inside `SecurityConfig`. This created a loop where neither could start first.
+### Backend Infrastructure
+* **Language:** Java 22
+* **Framework:** Spring Boot 3.4
+* **Build Tool:** Maven
 
-### The Fix
-We refactored the architecture by extracting the user-loading logic into a separate configuration file:
-* **Moved:** `UserDetailsService`, `PasswordEncoder`, and `AuthenticationProvider`
-* **To:** A new `ApplicationConfig` class.
+### Data Persistence
+* **MongoDB:** Primary document store for Users, Rides, and historical data. Used for its schema flexibility and aggregation capabilities.
+* **Redis:** In-memory data store. Used for high-speed geospatial indexing, distributed locks, and rate limiting counters.
 
-This allowed both the Security Configuration and the Filter to access user data independently without locking each other.
+### DevOps & Tools
+* **Docker:** Containerization of Redis and application services.
+* **Redisson:** Redis Java client for distributed objects.
+* **Lombok:** Boilerplate reduction.
+
+---
+
+## API Reference
+
+### Authentication
+* `POST /api/auth/register` - Register a new User or Driver (Requires role).
+* `POST /api/auth/login` - Authenticate credentials and receive a JWT Bearer token.
+
+### Ride Management (Core)
+* `POST /api/v1/rides` - Create a new ride request (Broadcasts via WebSocket).
+* `GET /api/v1/user/rides` - Get all rides for the currently logged-in user.
+* `POST /api/v1/rides/{rideId}/complete` - Mark a ride as completed (Requires Accepted status).
+
+### Driver Operations
+* `GET /api/v1/driver/rides/requests` - View all pending (REQUESTED) rides.
+* `POST /api/v1/driver/rides/{id}/accept` - Accept a ride. **(Protected by Distributed Redlock)**.
+* `GET /api/v1/driver/{driverId}/active-rides` - Get currently active rides for a specific driver.
+* `POST /api/v1/driver/location` - Ping driver's real-time location to Redis Grid.
+* `GET /api/v1/nearby-drivers` - Fetch available driver IDs in the current 1km Grid Bucket **(O(1) Search)**.
+
+### Search & Filtering Engine
+* `GET /api/v1/search` - Basic text search on Pickup/Drop locations (Case-insensitive Regex).
+* `GET /api/v1/advanced-search` - Multi-criteria filter (Status, Text, Pagination).
+* `GET /api/v1/filter-status` - Filter rides by specific status (e.g., REQUESTED, COMPLETED).
+* `GET /api/v1/filter-distance` - Find rides within a specific distance range (min/max km).
+* `GET /api/v1/filter-date-range` - Find rides created between two dates.
+* `GET /api/v1/date/{date}` - Get all rides that occurred on a specific calendar date.
+* `GET /api/v1/sort` - Sort rides by Fare amount (ASC/DESC).
+
+### Analytics & Reporting
+* `GET /api/v1/analytics/driver/{driverId}/summary` - Aggregated earnings, ride count, and average distance for a driver.
+* `GET /api/v1/analytics/user/{userId}/spending` - Total spending history for a user.
+* `GET /api/v1/analytics/status-summary` - Statistical breakdown of rides by current status.
+* `GET /api/v1/analytics/rides-per-day` - Time-series data showing daily ride volume.
+
+### User Specific
+* `GET /api/v1/user/{userId}` - Admin lookup for all rides by a specific User ID.
+* `GET /api/v1/user/{userId}/status/{status}` - Lookup specific user rides filtered by status.
+
+---
+
+## Setup & Installation
+
+Follow these steps to get the distributed infrastructure running locally.
+
+### 1. Prerequisites
+Ensure you have the following installed:
+* **Java JDK 22** (or JDK 17+)
+* **Docker & Docker Compose** (Required for Redis)
+* **Maven** (Build tool)
+
+### 2. Infrastructure Setup (Redis)
+We use Redis for Distributed Locking, Geo-Sharding, and Rate Limiting. Run it via Docker:
+
+```bash
+docker run -d --name uber-redis -p 6379:6379 redis
+```
+
+### 3. Application Configuration
+
+Update your `src/main/resources/application.properties` file to point to your local database instances.
+
+#### application.properties
+
+```properties
+# MongoDB Configuration
+spring.data.mongodb.uri=mongodb://localhost:27017/uber_db
+
+# Redis Configuration (Critical for Redisson & Locking)
+spring.data.redis.host=localhost
+spring.data.redis.port=6379
+
+# JWT Security
+jwt.secret=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+jwt.expiration=86400000
+```
+
+### 4. Build and Run
+
+Compile the application and start the Spring Boot server.
+
+#### Build the Project
+
+```bash
+# Build the project (skipping tests for speed)
+mvn clean install -DskipTests
+# Run the application
+java -jar target/uber-0.0.1-SNAPSHOT.jar
+```
+
+The application will start on `http://localhost:8080`.
+
+WebSocket Endpoint: `ws://localhost:8080/ws`  
+API Entry Point: `http://localhost:8080/api/v1`
+
+
+
+---
+
+## License
+
+This project is licensed under the MIT License.

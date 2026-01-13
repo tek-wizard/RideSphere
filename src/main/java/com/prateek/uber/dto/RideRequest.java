@@ -12,6 +12,9 @@ public class RideRequest {
     @NotBlank(message = "Drop location is required")
     private String dropLocation;
 
+    private double pickupLat;
+    private double pickupLon;
+
     @NotNull(message = "Fare is required")
     private Double fare;
 

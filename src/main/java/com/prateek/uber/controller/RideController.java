@@ -1,16 +1,18 @@
 package com.prateek.uber.controller;
 
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import com.prateek.uber.dto.RideRequest;
 import com.prateek.uber.model.Ride;
-import com.prateek.uber.service.RideService;
+import com.prateek.uber.service.DriverLocationService;
 import com.prateek.uber.service.RideSearchService;
+import com.prateek.uber.service.RideService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -19,8 +21,9 @@ public class RideController {
 
     private final RideService rideService;
     private final RideSearchService searchService;
+    private final DriverLocationService locationService;
 
-    // Basic ->
+    // Core Ride Lifecycle Endpoints
 
     @PostMapping("/rides")
     public ResponseEntity<Ride> createRide(@RequestBody @Valid RideRequest request) {
@@ -32,6 +35,13 @@ public class RideController {
         return ResponseEntity.ok(rideService.getUserRides());
     }
 
+    @PostMapping("/rides/{rideId}/complete")
+    public ResponseEntity<Ride> completeRide(@PathVariable String rideId) {
+        return ResponseEntity.ok(rideService.completeRide(rideId));
+    }
+
+    // Driver Operations (Geospatial & Dispatch)
+
     @GetMapping("/driver/rides/requests")
     public ResponseEntity<List<Ride>> getPendingRides() {
         return ResponseEntity.ok(rideService.getPendingRides());
@@ -42,12 +52,30 @@ public class RideController {
         return ResponseEntity.ok(rideService.acceptRide(rideId));
     }
 
-    @PostMapping("/rides/{rideId}/complete")
-    public ResponseEntity<Ride> completeRide(@PathVariable String rideId) {
-        return ResponseEntity.ok(rideService.completeRide(rideId));
+    @GetMapping("/driver/{driverId}/active-rides")
+    public ResponseEntity<List<Ride>> getDriverActiveRides(@PathVariable String driverId) {
+        return ResponseEntity.ok(searchService.getRidesByFieldAndStatus("driverId", driverId, "ACCEPTED"));
     }
 
-    // Search & Filters ->
+    // Redis: Updates driver's real-time location bucket
+    @PostMapping("/driver/location")
+    public ResponseEntity<String> updateLocation(
+            @RequestParam String driverId,
+            @RequestParam double lat,
+            @RequestParam double lon) {
+        locationService.updateDriverLocation(driverId, lat, lon);
+        return ResponseEntity.ok("Location Updated");
+    }
+
+    // Redis: O(1) Lookup for drivers in the current grid
+    @GetMapping("/nearby-drivers")
+    public ResponseEntity<Set<String>> getNearbyDrivers(
+            @RequestParam double lat,
+            @RequestParam double lon) {
+        return ResponseEntity.ok(locationService.getNearbyDrivers(lat, lon));
+    }
+
+    // Search & Analytics Endpoints
 
     @GetMapping("/search")
     public ResponseEntity<List<Ride>> search(@RequestParam String text) {
@@ -92,9 +120,7 @@ public class RideController {
         return ResponseEntity.ok(searchService.sortByFare(order));
     }
 
-    // ID BASED ->
-
-    // get rides for a specific user ID
+    // Admin / User History Lookups
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<Ride>> getRidesByUserId(@PathVariable String userId) {
         return ResponseEntity.ok(searchService.getRidesByFieldAndStatus("userId", userId, null));
@@ -104,11 +130,5 @@ public class RideController {
     public ResponseEntity<List<Ride>> getUserRidesByStatus(
             @PathVariable String userId, @PathVariable String status) {
         return ResponseEntity.ok(searchService.getRidesByFieldAndStatus("userId", userId, status));
-    }
-
-    // get active rides (accepted) for a driver
-    @GetMapping("/driver/{driverId}/active-rides")
-    public ResponseEntity<List<Ride>> getDriverActiveRides(@PathVariable String driverId) {
-        return ResponseEntity.ok(searchService.getRidesByFieldAndStatus("driverId", driverId, "ACCEPTED"));
     }
 }
